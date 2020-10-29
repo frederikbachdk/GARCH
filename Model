@@ -183,7 +183,7 @@ call_price_sim(S_t, K, horizon, par, draws, r, model)
 						
 				//ALGORITHM STEP 3: Returning the mean of the Xi vector which is our call option price estimate
 					return meanc(temp);
-   }
+   	}
 
  //The classical B-S formula
 black_scholes(vol, K, S, r, h)	  // h = T-t , vol = sigma
