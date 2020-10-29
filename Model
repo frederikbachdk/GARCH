@@ -1,0 +1,276 @@
+#include <oxstd.h>
+#include <oxfloat.h>
+#include <oxdraw.oxh>
+#include <oxfloat.h>
+
+//This code uses parameter estimates obtained by the PcGive GARCH module to estimate option prices for a specific GARCH model
+
+//Global variable 
+decl x; 
+
+																	  															   
+call_price_sim(S_t, K, horizon, par, draws, r, model)
+   	{
+		//Variables for simulation in all models
+		decl S_T	= nans(draws,1);
+		decl temp	= nans(draws,1);
+		decl T = rows(x);
+			
+		//sigma^2 sequence
+		decl sigma2  = nans(T,1);
+		sigma2[0][0] = variance(x);
+			
+		//mu sequence
+		decl mu	   	= nans(T,1);
+		mu[0][0] 	= 0;
+	
+		decl omega	= par[0]; 
+		decl alpha	= par[1];
+		decl beta	= par[2];
+		decl psi	= par[3];
+
+		decl s, rsum, ret, sdf, theta, prodsdf, m;
+
+		//ALGORITHM STEP 1: Definition of the GARCH process
+		if(model == 1) //Model G1: GARCH(1,1)
+				{	
+					for(decl t=1; t<T; ++t)
+		    			{
+							mu[t][0]	 = psi*x[t-1][0];
+							sigma2[t][0] = omega + alpha*(x[t-1][0]-mu[t-1][0])^2 + beta*sigma2[t-1][0];
+		    			}
+						
+		//ALGORITHM STEP 2: Simulation
+					for(decl i = 0; i < draws;++i)
+						{
+							ret		= nans(horizon,1);	 //return sequence
+							theta	= nans(horizon,1);	 //theta sequence
+							sdf		= nans(horizon,1);	 //sdf sequence
+							s = sigma2[rows(x)-1][0];	 //estimate of sigma_t^2 with t the time of the last observation
+							m = mu[rows(x)-1][0];  //estimate of mu_t with t the time of the last observation.
+							s = omega + alpha*(x[rows(x)-1][0]-m)^2 + beta*s;  //estimate of sigma_{t+1}^2 with t the time of the last observation
+							m = psi*x[rows(x)-1][0]; //estimate of mu_t+1 
+							
+							for(decl j=0;j<horizon;++j)
+								{						
+									theta[j]	= (r-m)/s-1/2; //estimate of theta_t
+									ret[j] 		= m + sqrt(s)*rann(1,1);  //simulated return
+									sdf[j]		= exp(theta[j]*ret[j]) / exp((1+theta[j])*m +(1+theta[j])^2*s/2 ); //simulated sdf, i.e. m_{t,t+1}
+									s			= omega + alpha*(ret[j]-m)^2+beta*s;   //estimate of sigma_t+1^2 [i.e. sigma2 at time j+1]
+									m			= psi*ret[j];	//estimate of mu_t+1
+								}
+							rsum	= sumc(ret); //accumulated return over the horizon
+							S_T[i]	= S_t*exp(rsum); //simulated price at the expiration date of the option (i.e. at the end of the horizon)
+							prodsdf = prodc(sdf);  //simulated sdf for discounting payoffs occuring at the expiration date, i.e. m_{t,T}
+							temp[i]	= prodsdf*(S_T[i]-K)*(S_T[i]>K);	//m_{t,T}*max(S_T-K,0)  		
+						}					 				
+					}
+
+				else if (model == 2) //Model G2: GIM-GARCH(1,1)
+					{
+					decl gamma  = par[4];
+					
+						for(decl t=1; t<T; ++t)
+			    			{
+								sigma2[t][0] = omega + alpha*(x[t-1][0]-mu[t-1][0])^2 + beta*sigma2[t-1][0];
+								mu[t][0]	 = psi*x[t-1][0]+gamma*sqrt(sigma2[t][0]);
+			    			}
+			
+		//ALGORITHM STEP 2: Simulation
+						for(decl i = 0; i < draws;++i)
+							{
+								ret		= nans(horizon,1);	 //return sequence
+								theta	= nans(horizon,1);	 //theta sequence
+								sdf		= nans(horizon,1);	 //sdf sequence
+								s = sigma2[rows(x)-1][0];	 //estimate of sigma_t^2 with t the time of the last observation
+								m = mu[rows(x)-1][0];  //estimate of mu_t with t the time of the last observation.
+								s = omega + alpha*(x[rows(x)-1][0]-m)^2 + beta*s;  //estimate of sigma_{t+1}^2 with t the time of the last observation
+								m = psi*x[rows(x)-1][0]+gamma*sqrt(s); //estimate of mu_t+1
+								
+								for(decl j=0;j<horizon;++j)
+									{							
+										theta[j]	= (r-m)/s-1/2; //estimate of theta_t
+										ret[j] 		= m + sqrt(s)*rann(1,1);  //simulated return
+										sdf[j]		= exp(theta[j]*ret[j]) / exp((1+theta[j])*m +(1+theta[j])^2*s/2 ); //simulated sdf, i.e. m_{t,t+1}m
+										s			= omega + alpha*(ret[j]-m)^2+beta*s;   //estimate of sigma_t+1^2 [i.e. sigma2 at time j+1]
+										m			= psi*ret[j]+gamma*sqrt(s);	//estimate of mu_t+1
+									}
+								rsum	= sumc(ret); //accumulated return over the horizon
+								S_T[i]	= S_t*exp(rsum); //simulated price at the expiration date of the option (i.e. at the end of the horizon)
+								prodsdf = prodc(sdf);  //simulated sdf for discounting payoffs occuring at the expiration date, i.e. m_{t,T}
+								temp[i]	= prodsdf*(S_T[i]-K)*(S_T[i]>K);	//m_{t,T}*max(S_T-K,0)  		
+							}
+					}
+				else if(model == 3)	//Model G3: GIM-NGARCH(1,1)
+					{
+				//Model specific parameters
+				decl gamma  = par[4];
+				decl kappa  = par[5];
+					
+					for(decl t=1; t<T; ++t)
+		    			{
+							sigma2[t][0] = omega + alpha*(x[t-1][0]-mu[t-1][0]-kappa)^2 + beta*sigma2[t-1][0];
+							mu[t][0]	 = psi*x[t-1][0]+gamma*sqrt(sigma2[t][0]);
+		    			}
+		
+		//ALGORITHM STEP 2: Simulation
+					for(decl i = 0; i < draws;++i)
+						{
+							ret		= nans(horizon,1);	 //return sequence
+							theta	= nans(horizon,1);	 //theta sequence
+							sdf		= nans(horizon,1);	 //sdf sequence
+							s = sigma2[rows(x)-1][0];	 //estimate of sigma_t^2 with t the time of the last observation
+							m = mu[rows(x)-1][0];	 //estimate of mu_t with t the time of the last observation
+							s = omega + alpha*(x[rows(x)-1][0]-m-kappa)^2 + beta*s;  //estimate of sigma_{t+1}^2 with t the time of the last observation
+							m = psi*x[rows(x)-1][0]+gamma*sqrt(s); //estimate of mu_t+1
+							
+							for(decl j=0;j<horizon;++j)
+								{							
+									theta[j]	= (r-m)/s-1/2; //estimate of theta_t
+									ret[j] 		= m + sqrt(s)*rann(1,1);  //simulated return
+									sdf[j]		= exp(theta[j]*ret[j]) / exp((1+theta[j])*m +(1+theta[j])^2*s/2 ); //simulated sdf, i.e. m_{t,t+1}
+									s			= omega + alpha*(ret[j]-m-kappa)^2+beta*s;   //estimate of sigma_t+1^2 [i.e. sigma2 at time j+1]
+									m			= psi*ret[j]+gamma*sqrt(s);	//estimate of mu_t+1
+								}
+							rsum	= sumc(ret); //accumulated return over the horizon
+							S_T[i]	= S_t*exp(rsum); //simulated price at the expiration date of the option (i.e. at the end of the horizon)
+							prodsdf = prodc(sdf);  //simulated sdf for discounting payoffs occuring at the expiration date, i.e. m_{t,T}
+							temp[i]	= prodsdf*(S_T[i]-K)*(S_T[i]>K);	//m_{t,T}*max(S_T-K,0)  		
+						}
+							}
+					else if(model == 4)
+						{
+						decl s, rsum, ret, sdf, theta, prodsdf, m, gim;
+
+				//Vector of parameter estimates
+				decl gamma  = par[4];
+				decl phi  	= par[5];
+		
+				//ALGORITHM STEP 1: Definition of the GARCH process
+		
+				//Model G4 - GIM-GJR-GARCH(1,1)		
+					for(decl t=1; t<T; ++t)
+		    			{
+							sigma2[t][0] = omega + alpha*(x[t-1][0]-mu[t-1][0])^2 + phi*(x[t-1][0]-mu[t-1][0]<0)*(x[t-1][0]-mu[t-1][0])^2 + beta*sigma2[t-1][0];
+							mu[t][0]	 = psi*x[t-1][0]+gamma*sqrt(sigma2[t][0]);
+		    			}
+		
+				//ALGORITHM STEP 2: Simulation
+					for(decl i = 0; i < draws;++i)
+						{
+							ret		= nans(horizon,1);	 //return sequence
+							theta	= nans(horizon,1);	 //theta sequence
+							sdf		= nans(horizon,1);	 //sdf sequence
+							s = sigma2[rows(x)-1][0];	 //estimate of sigma_t^2 with t the time of the last observation
+							m = mu[rows(x)-1][0];	 //estimate of mu_t with t the time of the last observation
+							s = omega + alpha*(x[rows(x)-1][0]-m)^2 + phi*(x[rows(x)-1][0]-mu[rows(x)-1][0]<0)*(x[rows(x)-1][0]-mu[rows(x)-1][0])^2 + beta*s;  //estimate of sigma_{t+1}^2 with t the time of the last observation
+							m = psi*x[rows(x)-1][0]+gamma*sqrt(s); //estimate of mu_t+1
+		
+							for(decl j=0;j<horizon;++j)
+								{							
+									theta[j]	= (r-m)/s-1/2; //estimate of theta_t
+									ret[j] 		= m + sqrt(s)*rann(1,1);  //simulated return
+									sdf[j]		= exp(theta[j]*ret[j]) / exp((1+theta[j])*m +(1+theta[j])^2*s/2 ); //simulated sdf, i.e. m_{t,t+1}
+									s			= omega + alpha*(ret[j]-m)^2+phi*(ret[j]-m<0)*(ret[j]-m)^2 + beta*s;   //estimate of sigma_t+1^2 [i.e. sigma2 at time j+1]
+									m			= psi*ret[j]+gamma*sqrt(s);	//estimate of mu_t+1
+								}
+							rsum	= sumc(ret); //accumulated return over the horizon
+							S_T[i]	= S_t*exp(rsum); //simulated price at the expiration date of the option (i.e. at the end of the horizon)
+							prodsdf = prodc(sdf);  //simulated sdf for discounting payoffs occuring at the expiration date, i.e. m_{t,T}
+							temp[i]	= prodsdf*(S_T[i]-K)*(S_T[i]>K);	//m_{t,T}*max(S_T-K,0)  		
+								}	
+						}
+						
+				//ALGORITHM STEP 3: Returning the mean of the Xi vector which is our call option price estimate
+					return meanc(temp);
+   }
+
+ //The classical B-S formula
+black_scholes(vol, K, S, r, h)	  // h = T-t , vol = sigma
+	{
+		decl u;
+		u 		= (log(K* exp(-(r- vol^2/2)*h)) - log(S))/(vol * sqrt(h));
+		return S*probn(-u + vol*sqrt(h)) - exp(-r*h)*K*probn(-u); 
+	}
+   
+main()
+	{
+		decl model = 4; //Here, the model of choice is defined (G1 = 1) 
+		decl t1, t2, par;
+		decl M = 100000; //Number of draws for simulations
+
+		//Begins timer
+		t1 = timer();
+		
+	  	//Data load - uses observations from January 3rd 2000 until the day of estimation defined by the row number in the return dataset.
+	  	decl data	= loadmat("Returns.in7");
+	  		    x	= data[1:5109][2];			  
+		decl vol 	= variance(x)^0.5;
+
+		//Vector of parameter estimates obtained by PcGive GARCH module
+		if(model == 1)
+			par = 4.00935*10^(-07)| 0.117758 | 0.867012| -0.0523776;
+		else if(model == 2)
+			par = 4.15111*10^(-7) | 0.123798 | 0.860989| -0.0589860| 0.0816356;
+		else if(model == 3)
+			par = 1.00201*10^(-13)| 0.121230 | 0.842836| -0.0635766| 0.0310605 | 0.00247940;
+		else if(model == 4)
+			par = 4.72626*10^(-7) | 0.000000 | 0.871557| -0.0552475| 0.045835  | 0.207340;	
+			
+		//Parameter values for option pricing:
+		decl r	= 0.0009/252; 	// 1-month US T-bill rate converted to daily interest rate. The interest rate is divided by 252, which is roughly the number of trading days during a year.
+		decl S_t = 2797.8;  	// Last traded price of the index on the day of estimation
+		decl K0	= 2800;			// Strike price in hundreds closest to the last traded price (used for output table)
+
+		
+		//Defines the output table and which maturities to analyse measured (in days)
+		decl table = constant(0,14,7);
+		table[0][1] = 1;
+		table[0][2] = 6;
+		table[0][3] = 19;
+		table[0][4] = 40;
+		table[0][5] = 69;
+		table[0][6] = 84;
+		
+		// Computing call option prices and presents results in table. The simulation procedure takes about 5 minutes to complete.
+			if(1)
+				{
+					println("\nComputing prices based on the Black-Scholes model...");
+					decl i,j;	
+
+						for(i=1;i<14;i=i+1)
+							{
+								table[i][0]=K0+50*(i-7);
+							}
+						
+						for(i=1;i<14;i=i+1)
+							{
+								for(j=1;j<7;j=j+1)
+									{
+										table[i][j]=black_scholes(vol, table[i][0], S_t, r, table[0][j]);
+									}
+							}
+					print(table);
+
+					println("\nComputing prices based on GARCH model G",model,"...\n");
+						for(i=1;i<14;i=i+1)
+							{
+								table[i][0]=K0+50*(i-7);
+							}
+						
+						for(i=1;i<14;i=i+1)
+							{
+								for(j=1;j<7;j=j+1)
+									{
+										table[i][j]=call_price_sim(S_t, table[i][0], table[0][j], par, M, r, model);
+									}
+							}
+					print(table);
+
+					
+				}
+		//Ends timer and presents estimation duration		
+		t2=timer();	
+		print("\n\nElapsed time (all computations): ",timespan(t1,t2),"\n");
+	
+	}
