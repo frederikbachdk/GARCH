@@ -3,7 +3,8 @@
 #include <oxdraw.oxh>
 #include <oxfloat.h>
 
-//This code uses parameter estimates obtained by the PcGive GARCH module to estimate option prices for a specific GARCH model
+//This code is used for estimating option prices for a given date with the Black-Scholes model and one of four specific GARCH specifications, denoted G1-G4. 
+//A prerequisite for using the code is that the GARCH model has been estimated beforehand, i.e. the parameter estimates are assumed to be known.
 
 //Global variable 
 decl x; 
