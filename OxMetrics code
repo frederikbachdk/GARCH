@@ -3,8 +3,7 @@
 #include <oxdraw.oxh>
 #include <oxfloat.h>
 
-//This code is used for estimating option prices for a given date with the Black-Scholes model and one of four specific GARCH specifications, denoted G1-G4. 
-//A prerequisite for using the code is that the GARCH model has been estimated beforehand, i.e. the parameter estimates are assumed to be known.
+//This code uses parameter estimates obtained by the PcGive GARCH module to estimate option prices for a specific GARCH model
 
 //Global variable 
 decl x; 
@@ -184,7 +183,7 @@ call_price_sim(S_t, K, horizon, par, draws, r, model)
 						
 				//ALGORITHM STEP 3: Returning the mean of the Xi vector which is our call option price estimate
 					return meanc(temp);
-   	}
+   }
 
  //The classical B-S formula
 black_scholes(vol, K, S, r, h)	  // h = T-t , vol = sigma
@@ -210,18 +209,18 @@ main()
 
 		//Vector of parameter estimates obtained by PcGive GARCH module
 		if(model == 1)
-			par = 4.00935*10^(-07)| 0.117758 | 0.867012| -0.0523776;
+			par = 4.02771*10^(-07)| 0.117956 | 0.866690| -0.0524546;
 		else if(model == 2)
-			par = 4.15111*10^(-7) | 0.123798 | 0.860989| -0.0589860| 0.0816356;
+			par = 4.16579*10^(-7) | 0.123948 | 0.860734| -0.0590240| 0.0815524;
 		else if(model == 3)
-			par = 1.00201*10^(-13)| 0.121230 | 0.842836| -0.0635766| 0.0310605 | 0.00247940;
+			par = 1.66494*10^(-13)| 0.121204 | 0.842829| -0.0635377| 0.0309380 | 0.00248039;
 		else if(model == 4)
-			par = 4.72626*10^(-7) | 0.000000 | 0.871557| -0.0552475| 0.045835  | 0.207340;	
+			par = 4.61630*10^(-7) | 0.000000 | 0.872142| -0.0552171| 0.027812  | 0.208390;	
 			
 		//Parameter values for option pricing:
 		decl r	= 0.0009/252; 	// 1-month US T-bill rate converted to daily interest rate. The interest rate is divided by 252, which is roughly the number of trading days during a year.
 		decl S_t = 2797.8;  	// Last traded price of the index on the day of estimation
-		decl K0	= 2800;			// Strike price in hundreds closest to the last traded price (used for output table)
+		decl K0	= 2800;		// Strike price in hundreds closest to the last traded price (used for output table)
 
 		
 		//Defines the output table and which maturities to analyse measured (in days)
