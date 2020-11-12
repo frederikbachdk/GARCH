@@ -217,7 +217,7 @@ main()
 		else if(model == 4)
 			par = 4.61630*10^(-7) | 0.000000 | 0.872142| -0.0552171| 0.027812  | 0.208390;	
 			
-		//Parameter values for option pricing:
+		//Parameter values for option pricing. These should be updated with values relevant for the given date of estimation.
 		decl r	= 0.0009/252; 	// 1-month US T-bill rate converted to daily interest rate. The interest rate is divided by 252, which is roughly the number of trading days during a year.
 		decl S_t = 2797.8;  	// Last traded price of the index on the day of estimation
 		decl K0	= 2800;		// Strike price in hundreds closest to the last traded price (used for output table)
